@@ -75,6 +75,7 @@ async function main() {
   }
   $('loginBtn').style.display = 'none';
   const idToken = liff.getIDToken();
+  checkFriend(); // APIの成否に関係なく友だち状態を確認する
 
   try {
     let me;
@@ -127,7 +128,13 @@ async function checkFriend() {
   try {
     const f = await liff.getFriendship();
     $('friend').style.display = f.friendFlag ? 'none' : 'block';
-  } catch (e) { /* 外部ブラウザ等で取得不可 */ }
+  } catch (e) {
+    // 取得できない場合も追加導線は出し、原因を表示する
+    $('friend').style.display = 'block';
+    $('friend').insertAdjacentHTML('beforeend',
+      '<p class="muted">友だち状態を取得できませんでした: ' + (e.message || e) +
+      '<br>(LINEアプリ内ブラウザで開いているか / scopeに profile があるか確認)</p>');
+  }
 }
 $('addBtn').onclick = () => { location.href = cfg.ADD_FRIEND_URL; };
 $('recheckBtn').onclick = checkFriend;
