@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>管理画面 (モック)</title>
+<style>
+  body { font-family: -apple-system, sans-serif; margin: 0; padding: 20px; background: #f4f6f8; color: #222; max-width: 1000px; margin: 0 auto; }
+  section { background: #fff; border-radius: 10px; padding: 16px 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+  h2 { font-size: 16px; margin: 0 0 12px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { border-bottom: 1px solid #eee; padding: 6px 8px; text-align: left; word-break: break-all; }
+  input, select, textarea { padding: 6px; font-size: 14px; border: 1px solid #ccc; border-radius: 6px; }
+  textarea { width: 100%; box-sizing: border-box; }
+  button { padding: 6px 14px; border: 0; border-radius: 6px; background: #06c755; color: #fff; cursor: pointer; }
+  button.gray { background: #888; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
+  .out { background: #f0fff4; padding: 8px; border-radius: 6px; margin-top: 8px; font-size: 13px; word-break: break-all; }
+  .err { background: #fff0f0; color: #c0392b; }
+  code { background: #eee; padding: 1px 4px; border-radius: 3px; }
+</style>
+</head>
+<body>
+<h1>管理画面 (モック)</h1>
+<section>
+  <div class="row">
+    管理キー <input type="password" id="key">
+    <button id="loadBtn">読み込み</button>
+    <span id="status"></span>
+  </div>
+</section>
+
+<section>
+  <h2>企業</h2>
+  <table id="companies"></table>
+  <div class="row" style="margin-top:12px">
+    <input id="newCode" placeholder="企業コード(英小文字)">
+    <input id="newName" placeholder="企業名">
+    <button id="addCompanyBtn">追加/更新</button>
+  </div>
+  <div class="muted" style="font-size:12px">※ リッチメニューは企業追加後に「メニュー作成」を押して反映します。</div>
+</section>
+
+<section>
+  <h2>利用登録(既存導線の代役) → 連携URL発行</h2>
+  <div class="row">
+    <select id="suCompany"></select>
+    <input id="suEmp" placeholder="社員番号(任意)">
+    <button id="suBtn">サービスユーザー作成+連携URL発行</button>
+  </div>
+  <div id="suOut"></div>
+</section>
+
+<section>
+  <h2>企業別メッセージ配信 (ナローキャスト)</h2>
+  <div class="row"><select id="bcCompany"></select></div>
+  <textarea id="bcText" rows="3" placeholder="本文"></textarea>
+  <div class="row" style="margin-top:8px"><button id="bcBtn">配信</button></div>
+  <div id="bcOut"></div>
+</section>
+
+<section>
+  <h2>所属ユーザー</h2>
+  <table id="members"></table>
+</section>
+
+<section>
+  <h2>直近の配信ログ</h2>
+  <table id="log"></table>
+</section>
+
+<script src="config.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+$('key').value = sessionStorage.getItem('adminKey') || '';
+let liffId = '';
+
+async function api(payload) {
+  return callApi(Object.assign({ adminKey: $('key').value }, payload));
+}
+function out(el, msg, isErr) { $(el).innerHTML = '<div class="out ' + (isErr ? 'err' : '') + '">' + msg + '</div>'; }
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+async function load() {
+  try {
+    $('status').textContent = '読み込み中…';
+    sessionStorage.setItem('adminKey', $('key').value);
+    render(await api({ action: 'adminOverview' }));
+    $('status').textContent = '';
+  } catch (e) { $('status').textContent = e.message; }
+}
+
+function render(d) {
+  liffId = d.liffId;
+  $('companies').innerHTML = '<tr><th>コード</th><th>企業名</th><th>有効</th><th>所属数</th><th>連携済</th><th>メニュー</th><th>QR/URL用リンク</th></tr>' +
+    d.companies.map((c) => `<tr><td>${esc(c.code)}</td><td>${esc(c.name)}</td><td>${c.enabled ? '○' : '×'}</td>
+      <td>${c.members}</td><td>${c.linked}</td>
+      <td>${c.richmenuId ? '作成済' : '未作成'} <button class="gray" onclick="mkMenu('${esc(c.code)}')">メニュー作成</button></td>
+      <td><code>https://liff.line.me/${esc(liffId)}?company=${esc(c.code)}</code></td></tr>`).join('');
+  const opts = d.companies.map((c) => `<option value="${esc(c.code)}">${esc(c.name)} (${esc(c.code)})</option>`).join('');
+  $('suCompany').innerHTML = opts; $('bcCompany').innerHTML = opts;
+  $('members').innerHTML = '<tr><th>表示名</th><th>企業</th><th>サービスUID</th><th>友だち</th><th>表示中メニュー</th><th>LINE userId</th></tr>' +
+    d.members.map((m) => `<tr><td>${esc(m.displayName)}</td><td>${esc(m.company)}</td><td>${esc(m.serviceUserId) || '-'}</td>
+      <td>${m.followed ? '○' : '?'}</td><td>${m.active ? '●' : ''}</td><td>${esc(m.lineUserId)}</td></tr>`).join('');
+  $('log').innerHTML = '<tr><th>日時</th><th>企業</th><th>本文</th><th>件数</th><th>結果</th></tr>' +
+    d.sendLog.map((l) => `<tr><td>${esc(l.at)}</td><td>${esc(l.company_code)}</td><td>${esc(l.text)}</td><td>${esc(l.target_count)}</td><td>${esc(l.result)}</td></tr>`).join('');
+}
+
+async function mkMenu(code) {
+  try { $('status').textContent = 'メニュー作成中…'; await api({ action: 'setupRichMenu', code }); await load(); }
+  catch (e) { $('status').textContent = e.message; }
+}
+
+$('loadBtn').onclick = load;
+$('addCompanyBtn').onclick = async () => {
+  try { render(await api({ action: 'upsertCompany', code: $('newCode').value, name: $('newName').value, enabled: true })); }
+  catch (e) { $('status').textContent = e.message; }
+};
+$('suBtn').onclick = async () => {
+  try {
+    const r = await api({ action: 'createServiceUser', companyCode: $('suCompany').value, employeeNo: $('suEmp').value });
+    out('suOut', `サービスユーザーID: <b>${esc(r.serviceUserId)}</b><br>連携URL(24h有効・1回限り): <a href="${esc(r.linkUrl)}">${esc(r.linkUrl)}</a>`);
+    load();
+  } catch (e) { out('suOut', esc(e.message), true); }
+};
+$('bcBtn').onclick = async () => {
+  try {
+    const r = await api({ action: 'broadcast', companyCode: $('bcCompany').value, text: $('bcText').value });
+    out('bcOut', `配信対象 ${r.targets} 件 / 結果: ${esc(r.result)}`); load();
+  } catch (e) { out('bcOut', esc(e.message), true); }
+};
+if ($('key').value) load();
+</script>
+</body>
+</html>

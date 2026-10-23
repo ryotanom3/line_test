@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>従業員向けLINE連携</title>
+<style>
+  body { font-family: -apple-system, sans-serif; margin: 0; padding: 20px; background: #f4f6f8; color: #222; }
+  .card { background: #fff; border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+  h1 { font-size: 18px; margin: 0 0 8px; }
+  .muted { color: #777; font-size: 13px; }
+  .err { color: #c0392b; }
+  button { width: 100%; padding: 12px; border: 0; border-radius: 8px; background: #06c755; color: #fff; font-size: 16px; margin-top: 12px; }
+  button.sub { background: #fff; color: #06c755; border: 1px solid #06c755; margin-top: 8px; }
+  ul { list-style: none; padding: 0; margin: 0; }
+  li { padding: 10px 0; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }
+  .badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: #e8f5e9; color: #2e7d32; }
+  .badge.off { background: #eee; color: #888; }
+  .badge.active { background: #06c755; color: #fff; }
+  li button { width: auto; padding: 6px 12px; font-size: 13px; margin: 0; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1 id="title">読み込み中…</h1>
+  <div id="sub" class="muted"></div>
+  <div id="msg"></div>
+  <button id="loginBtn" style="display:none">LINEでログイン</button>
+</div>
+<div id="me" class="card" style="display:none">
+  <h1>所属企業</h1>
+  <div class="muted" id="hello"></div>
+  <ul id="list"></ul>
+</div>
+<div id="friend" class="card" style="display:none">
+  <h1>公式アカウントを友だち追加してください</h1>
+  <div class="muted">友だち追加すると、所属企業向けのお知らせやメニューが届きます。</div>
+  <button id="addBtn">友だち追加</button>
+  <button class="sub" id="recheckBtn">追加した → 再確認</button>
+</div>
+
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<script src="config.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+const cfg = window.APP_CONFIG;
+// LIFF URL のクエリ (?company=xxx / ?link=xxx)。ログイン往復後もSDKが復元する
+const params = new URLSearchParams(location.search);
+const companyCode = params.get('company');
+const linkToken = params.get('link');
+
+function showError(e) { $('msg').innerHTML = '<p class="err">' + (e.message || e) + '</p>'; }
+
+async function main() {
+  await liff.init({ liffId: cfg.LIFF_ID });
+
+  // ログイン前でも企業名は出せる (企業コード→企業名のマッピングはサービス側)
+  if (companyCode) {
+    try {
+      const c = await callApi({ action: 'companyInfo', code: companyCode });
+      $('title').textContent = c.name + ' 向け';
+      $('sub').textContent = 'LINEログインして、公式アカウントと連携します。';
+    } catch (e) { $('title').textContent = 'エラー'; return showError(e); }
+  } else if (linkToken) {
+    $('title').textContent = 'アカウント連携';
+    $('sub').textContent = 'サービスの利用登録情報とLINEを連携します。';
+  } else {
+    $('title').textContent = 'マイページ';
+  }
+
+  if (!liff.isLoggedIn()) {
+    $('loginBtn').style.display = 'block';
+    $('loginBtn').onclick = () => liff.login({ redirectUri: location.href });
+    return;
+  }
+  $('loginBtn').style.display = 'none';
+  const idToken = liff.getIDToken();
+
+  try {
+    let me;
+    if (linkToken) {
+      me = await callApi({ action: 'link', idToken, linkToken });
+      $('title').textContent = '連携が完了しました';
+      $('sub').textContent = '';
+    } else if (companyCode) {
+      me = await callApi({ action: 'join', idToken, companyCode });
+      $('title').textContent = '登録が完了しました';
+    } else {
+      me = await callApi({ action: 'me', idToken });
+    }
+    renderMe(me, idToken);
+    checkFriend();
+  } catch (e) { showError(e); }
+}
+
+function renderMe(me, idToken) {
+  $('me').style.display = 'block';
+  $('hello').textContent = me.displayName + ' さん';
+  $('list').innerHTML = '';
+  me.companies.forEach((c) => {
+    const li = document.createElement('li');
+    const left = document.createElement('span');
+    left.textContent = c.name + ' ';
+    const b1 = document.createElement('span');
+    b1.className = 'badge ' + (c.linked ? '' : 'off');
+    b1.textContent = c.linked ? '利用登録連携済' : '未連携';
+    left.appendChild(b1);
+    li.appendChild(left);
+    if (c.code === me.activeCompany) {
+      const a = document.createElement('span');
+      a.className = 'badge active'; a.textContent = '表示中のメニュー';
+      li.appendChild(a);
+    } else {
+      const btn = document.createElement('button');
+      btn.textContent = 'この企業に切替';
+      btn.onclick = async () => {
+        try { renderMe(await callApi({ action: 'switchCompany', idToken, companyCode: c.code }), idToken); }
+        catch (e) { showError(e); }
+      };
+      li.appendChild(btn);
+    }
+    $('list').appendChild(li);
+  });
+}
+
+async function checkFriend() {
+  try {
+    const f = await liff.getFriendship();
+    $('friend').style.display = f.friendFlag ? 'none' : 'block';
+  } catch (e) { /* 外部ブラウザ等で取得不可 */ }
+}
+$('addBtn').onclick = () => { location.href = cfg.ADD_FRIEND_URL; };
+$('recheckBtn').onclick = checkFriend;
+
+main().catch(showError);
+</script>
+</body>
+</html>
