@@ -262,6 +262,10 @@ function setupRichMenu_(code) {
   // 古いメニューは削除
   if (c.richmenu_id) line_('delete', '/v2/bot/richmenu/' + c.richmenu_id);
   update_('companies', c._row, { richmenu_id: id });
+  // 既にこの企業をアクティブにしているユーザーへ反映 (メニュー作成前に登録済みの人向け)
+  rows_('line_users').forEach(function (u) {
+    if (u.active_company === c.code) applyRichMenu_(u.line_user_id);
+  });
   return { richMenuId: id };
 }
 

@@ -49,7 +49,8 @@ const params = new URLSearchParams(location.search);
 const companyCode = params.get('company');
 const linkToken = params.get('link');
 
-function showError(e) { $('msg').innerHTML = '<p class="err">' + (e.message || e) + '</p>'; }
+const BUILD = '2026-10-23-c';
+function showError(e) { $('msg').innerHTML = '<p class="err">' + (e.message || e) + '</p><p class="muted">build: ' + BUILD + '</p>'; }
 
 async function main() {
   await liff.init({ liffId: cfg.LIFF_ID });
