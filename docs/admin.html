@@ -62,6 +62,7 @@
 <section>
   <h2>所属ユーザー</h2>
   <table id="members"></table>
+  <div id="relinkOut"></div>
 </section>
 
 <section>
@@ -99,9 +100,10 @@ function render(d) {
       <td><code>https://liff.line.me/${esc(liffId)}?company=${esc(c.code)}</code></td></tr>`).join('');
   const opts = d.companies.map((c) => `<option value="${esc(c.code)}">${esc(c.name)} (${esc(c.code)})</option>`).join('');
   $('suCompany').innerHTML = opts; $('bcCompany').innerHTML = opts;
-  $('members').innerHTML = '<tr><th>表示名</th><th>企業</th><th>サービスUID</th><th>友だち</th><th>表示中メニュー</th><th>LINE userId</th></tr>' +
+  $('members').innerHTML = '<tr><th>表示名</th><th>企業</th><th>サービスUID</th><th>友だち</th><th>表示中メニュー</th><th>LINE userId</th><th></th></tr>' +
     d.members.map((m) => `<tr><td>${esc(m.displayName)}</td><td>${esc(m.company)}</td><td>${esc(m.serviceUserId) || '-'}</td>
-      <td>${m.followed ? '○' : '?'}</td><td>${m.active ? '●' : ''}</td><td>${esc(m.lineUserId)}</td></tr>`).join('');
+      <td>${m.followed ? '○' : '?'}</td><td>${m.active ? '●' : ''}</td><td>${esc(m.lineUserId)}</td>
+      <td>${m.active ? `<button class="gray" onclick="relink('${esc(m.lineUserId)}')">メニュー再適用</button>` : ''}</td></tr>`).join('');
   $('log').innerHTML = '<tr><th>日時</th><th>企業</th><th>本文</th><th>件数</th><th>結果</th></tr>' +
     d.sendLog.map((l) => `<tr><td>${esc(l.at)}</td><td>${esc(l.company_code)}</td><td>${esc(l.text)}</td><td>${esc(l.target_count)}</td><td>${esc(l.result)}</td></tr>`).join('');
 }
@@ -109,6 +111,13 @@ function render(d) {
 async function mkMenu(code) {
   try { $('status').textContent = 'メニュー作成中…'; await api({ action: 'setupRichMenu', code }); await load(); }
   catch (e) { $('status').textContent = e.message; }
+}
+
+async function relink(lineUserId) {
+  try {
+    const r = await api({ action: 'relinkMenu', lineUserId });
+    out('relinkOut', `LINE API 応答: HTTP ${esc(r.code)} ${esc(r.body)}`, r.code !== 200);
+  } catch (e) { out('relinkOut', esc(e.message), true); }
 }
 
 $('loadBtn').onclick = load;

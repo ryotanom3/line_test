@@ -66,6 +66,7 @@ function route_(b) {
     case 'setupRichMenu': return setupRichMenu_(b.code);
     case 'createServiceUser': return createServiceUser_(b);
     case 'broadcast': return broadcast_(b);
+    case 'relinkMenu': return applyRichMenu_(b.lineUserId);
   }
   throw new Error('unknown action: ' + b.action);
 }
@@ -274,9 +275,12 @@ function applyRichMenu_(userId) {
   try {
     var u = findBy_('line_users', 'line_user_id', userId);
     var c = u && findCompany_(u.active_company);
-    if (c && c.richmenu_id) line_('post', '/v2/bot/user/' + userId + '/richmenu/' + c.richmenu_id);
-    else line_('delete', '/v2/bot/user/' + userId + '/richmenu');
-  } catch (e) { console.warn(e); }
+    var r;
+    if (c && c.richmenu_id) r = line_('post', '/v2/bot/user/' + userId + '/richmenu/' + c.richmenu_id);
+    else r = line_('delete', '/v2/bot/user/' + userId + '/richmenu');
+    if (r.code !== 200) console.warn('applyRichMenu failed', userId, r.code, r.body);
+    return r;
+  } catch (e) { console.warn(e); return { code: 0, body: String(e) }; }
 }
 
 // ---------------------------------------------------------------- LINE API
