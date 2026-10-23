@@ -77,9 +77,7 @@ async function main() {
   // IDトークンは発行から1時間で失効する。古いトークンが残っていたら再ログインして取り直す
   const decoded = liff.getDecodedIDToken();
   if (!decoded || decoded.exp * 1000 < Date.now() + 60 * 1000) {
-    liff.logout();
-    liff.login({ redirectUri: location.href });
-    return;
+    if (relogin()) return;
   }
   const idToken = liff.getIDToken();
   checkFriend(); // APIの成否に関係なく友だち状態を確認する
@@ -98,7 +96,25 @@ async function main() {
     }
     renderMe(me, idToken);
     checkFriend();
-  } catch (e) { showError(e); }
+  } catch (e) {
+    if (isTokenError(e) && relogin()) return;
+    showError(e);
+  }
+}
+
+// 失効/無効なトークンのエラーか
+function isTokenError(e) {
+  return /expired|revoked|invalid.*token|IdToken/i.test(String((e && e.message) || e));
+}
+
+// 保存済みのログイン情報を捨てて再ログインする。60秒以内の連続実行はループ防止のため行わない
+function relogin() {
+  const last = Number(sessionStorage.getItem('reloginAt') || 0);
+  if (Date.now() - last < 60 * 1000) return false;
+  sessionStorage.setItem('reloginAt', String(Date.now()));
+  liff.logout();
+  liff.login({ redirectUri: location.href });
+  return true;
 }
 
 function renderMe(me, idToken) {
@@ -136,6 +152,7 @@ async function checkFriend() {
     const f = await liff.getFriendship();
     $('friend').style.display = f.friendFlag ? 'none' : 'block';
   } catch (e) {
+    if (isTokenError(e) && relogin()) return;
     // 取得できない場合も追加導線は出し、原因を表示する
     $('friend').style.display = 'block';
     $('friend').insertAdjacentHTML('beforeend',
