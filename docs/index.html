@@ -74,6 +74,13 @@ async function main() {
     return;
   }
   $('loginBtn').style.display = 'none';
+  // IDトークンは発行から1時間で失効する。古いトークンが残っていたら再ログインして取り直す
+  const decoded = liff.getDecodedIDToken();
+  if (!decoded || decoded.exp * 1000 < Date.now() + 60 * 1000) {
+    liff.logout();
+    liff.login({ redirectUri: location.href });
+    return;
+  }
   const idToken = liff.getIDToken();
   checkFriend(); // APIの成否に関係なく友だち状態を確認する
 
